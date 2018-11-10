@@ -172,7 +172,7 @@ class Replay_Memory:
                     self.save_experience()
 
                 if len(self.experiences) > START_TO_TRAIN:
-					print(self.n, ";", self.rewards[0], ";", loss, ";\n", file=f)
+                    print(self.n, ";", self.rewards[0], ";", loss, ";\n", file=f)
                     self.train(optimizer)
 
                 self.n = self.n + 1
