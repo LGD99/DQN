@@ -31,6 +31,7 @@ class Replay_Memory:
 
         self.game_terminated = False
         self.score = 0
+        self.sum_score = 0
         self.image = []
 
         self.eps = EPS_START
@@ -165,6 +166,8 @@ class Replay_Memory:
                 self.save_dones()
                 self.preprocessing()
 
+                self.sum_score = self.sum_score + self.score
+
                 if self.n >= 3:
                     self.states_append()
 
@@ -172,7 +175,7 @@ class Replay_Memory:
                     self.save_experience()
 
                 if len(self.experiences) > START_TO_TRAIN:
-                    print(self.n, ";", self.rewards[0], ";", loss, ";\n", file=f)
+                    print(self.n, ";", self.sum_score, ";", loss, ";\n", file=f)
                     self.train(optimizer)
 
                 self.n = self.n + 1
