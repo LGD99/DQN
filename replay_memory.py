@@ -186,6 +186,7 @@ class Replay_Memory:
 
             self.env.reset()
             self.game_terminated = False
+            self.sum_score = 0
             self.number_of_terminated_games = self.number_of_terminated_games + 1
         f.close()
 
