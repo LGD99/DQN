@@ -4,8 +4,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+import time
 
 from parameters import *
+import numpy as np
 
 class DQN(nn.Module):
 
@@ -36,40 +38,54 @@ Experience = namedtuple('Experience',
                         ('state', 'next_state', 'action', 'reward', 'done'))
 
 
-def optimize(myexperiences, policy_net, target_net, optimizer):
+def optimize(myenv):
 
-    if len(myexperiences) < BATCH_SIZE:
-        return
+    if len(myenv.experiences) < START_TO_TRAIN:
+        return 0, 0
 
-    experiences = myexperiences
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    Experience = namedtuple('Experience',
+                            ('state', 'next_state', 'action', 'reward', 'done'))
+
+    # start_time = time.time()
+    experiences = myenv.sample(BATCH_SIZE)
     batch = Experience(*zip(*experiences))
 
-     # Compute a mask of non-final states and concatenate the batch elements
-    non_final_next_states = torch.tensor([s for s in batch.next_state if s is not None], device=device, dtype=torch.float).to(device)
-    state_batch = torch.tensor(batch.state, device=device, dtype=torch.float).to(device)
-    action_batch = torch.tensor(batch.action, dtype=torch.long).to(device).unsqueeze(1)
-    reward_batch = torch.tensor(batch.reward).to(device)
+    # Compute a mask of non-final states and concatenate the batch elements
+    next_state_batch = torch.tensor(np.array(batch.next_state, dtype=np.float32), device=device,
+                                    dtype=torch.float32).to(device)  # requires grad false
+    # next_state_batch = next_state_batch / 255.
+    state_batch = torch.tensor(np.array(batch.state, dtype=np.float32), device=device, dtype=torch.float32).to(
+        device)  # requires grad false
+    # state_batch = state_batch / 255.
+    action_batch = torch.tensor(batch.action, dtype=torch.long).to(device).unsqueeze(1)  # requires grad false
+    reward_batch = torch.tensor(batch.reward, dtype=torch.float32).to(device)  # requires grad false
+    done_list = [not i for i in batch.done]
+    done_batch = torch.tensor(np.multiply(done_list, 1), dtype=torch.float32).to(device)  # requires grad false
 
     # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
     # columns of actions taken
-    state_action_values = policy_net(state_batch).gather(1, action_batch)
+    state_action_values = myenv.net_Q(state_batch).gather(1, action_batch)  # requires grad true
+    avg_qscore = torch.sum(state_action_values.detach()) / BATCH_SIZE  # requires grad false
 
-    # Compute V(s_{t+1}) for all next states.
-    next_state = target_net(non_final_next_states).max(1)
-    next_state_values = next_state[0].detach()
-    next_state_indexes = next_state[1].detach()
+    # Compute max Q(s_{t+1},a') for all next states.
+    next_state_action_values = myenv.frozen_Q(next_state_batch).max(1)  # requires grad true
+    next_state_values = next_state_action_values[0].detach()  # requires grad false
 
     # Compute the expected Q values
-    expected_state_action_values = (next_state_values * GAMMA) + reward_batch
-    expected_state_action_values = expected_state_action_values.unsqueeze(1)
+    expected_state_action_values = (next_state_values * done_batch * GAMMA) + reward_batch
+    expected_state_action_values = expected_state_action_values.unsqueeze(1)  # requires grad true
 
     # Compute Huber loss
-    loss = F.smooth_l1_loss(state_action_values, expected_state_action_values)
+    loss = F.smooth_l1_loss(state_action_values,
+                            expected_state_action_values)  # grad_fn object at -> state_action_values grad_fn
 
     # Optimize the model
-    optimizer.zero_grad()
+    myenv.optimizer.zero_grad()
     loss.backward()
-    for param in policy_net.parameters():
-        param.grad.data.clamp_(-1, 1)
-    optimizer.step()
-
+    for param in myenv.net_Q.parameters():
+        param.grad.data.clamp_(-2, 2)  # 32*4*8*8
+    myenv.optimizer.step()
+    # print("Optimize: %s" %(time.time()-start_time))
+    return loss.item(), avg_qscore.item()

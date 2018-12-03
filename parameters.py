@@ -2,7 +2,7 @@
 GAMMA = 0.99
 
 #Epsilon-greedy policy parameters:
-EPS_START = 0.95
+EPS_START = 1
 EPS_STOP = 0.1
 EPS_FINAL_FRAME = 1000000
 
@@ -22,7 +22,7 @@ BATCH_SIZE = 32
 GAME = 'Breakout-v0'
 RENDER =False
 
-
+TIMING = True
 
 
 #Try-out
